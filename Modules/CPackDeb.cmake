@@ -390,22 +390,27 @@ if(CPACK_DEBIAN_PACKAGE_SHLIBDEPS)
       endforeach()
 
       if(lib_paths)
-        unset(lib_option)
+        unset(export_ld_path)
         foreach(path ${lib_paths})
-          list(APPEND lib_option "-l${path}")
+          set(export_ld_path "${export_ld_path}:${path}")
         endforeach()
+
+        set(old_ld_path "ENV{LD_LIBRARY_PATH}")
+        set(ENV{LD_LIBRARY_PATH} "$ENV{LD_LIBRARY_PATH}${export_ld_path}")
       endif()
 
       # Execute dpkg-shlibdeps
       # --ignore-missing-info : allow dpkg-shlibdeps to run even if some libs do not belong to a package
       # -O : print to STDOUT
-      execute_process(COMMAND ${SHLIBDEPS_EXECUTABLE} ${lib_option} --ignore-missing-info -O ${CPACK_DEB_BINARY_FILES}
+      execute_process(COMMAND ${SHLIBDEPS_EXECUTABLE} --ignore-missing-info -O ${CPACK_DEB_BINARY_FILES}
         WORKING_DIRECTORY "${CPACK_TEMPORARY_DIRECTORY}"
         OUTPUT_VARIABLE SHLIBDEPS_OUTPUT
         RESULT_VARIABLE SHLIBDEPS_RESULT
         ERROR_VARIABLE SHLIBDEPS_ERROR
         ERROR_STRIP_TRAILING_WHITESPACE
         OUTPUT_STRIP_TRAILING_WHITESPACE )
+      set(ENV{LD_LIBRARY_PATH} "${old_ld_path}")
+
       if(CPACK_DEBIAN_PACKAGE_DEBUG)
         # dpkg-shlibdeps will throw some warnings if some input files are not binary
         message( "CPackDeb Debug: dpkg-shlibdeps warnings \n${SHLIBDEPS_ERROR}")
