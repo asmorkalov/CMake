@@ -320,7 +320,7 @@ int cmCPackDebGenerator::createDeb()
   const char* debian_pkg_priority =
                               this->GetOption("CPACK_DEBIAN_PACKAGE_PRIORITY");
   const char* debian_pkg_arch =
-                          this->GetOption("CPACK_DEBIAN_PACKAGE_ARCHITECTURE");
+                          this->GetOption("CPACK_DEBIAN_PACKAGE_ARCHITECTURE_FINAL");
   const char* maintainer =  this->GetOption("CPACK_DEBIAN_PACKAGE_MAINTAINER");
   const char* desc =       this->GetOption("CPACK_DEBIAN_PACKAGE_DESCRIPTION");
 
