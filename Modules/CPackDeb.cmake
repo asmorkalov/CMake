@@ -568,8 +568,11 @@ endif()
 foreach(_FILE ${CPACK_DEB_SHARED_OBJECT_FILES})
   get_filename_component(_LIBNAME ${_FILE} NAME_WE)
   get_filename_component(_LIBEXT ${_FILE} EXT)
-  string(REGEX MATCH "so\\.([0-9]+\\.[0-9]+).*" _TARGET_VERSION ${_LIBEXT})
-  list(APPEND CPACK_DEBIAN_PACKAGE_SHLIBS_LIST "${_LIBNAME} ${CMAKE_MATCH_1} ${CPACK_DEBIAN_PACKAGE_NAME} (>= ${CPACK_DEBIAN_PACKAGE_VERSION})")
+
+  # For now we just assume that anything after '+' or '-' in a library version is
+  # a build metadata which we do not want to be presented in dependency version
+  string(REGEX MATCH "so\\.([0-9]+\\.[0-9]+)([^+-]*)" _TARGET_VERSION ${_LIBEXT})
+  list(APPEND CPACK_DEBIAN_PACKAGE_SHLIBS_LIST "${_LIBNAME} ${CMAKE_MATCH_1} ${CPACK_DEBIAN_PACKAGE_NAME} (>= ${CMAKE_MATCH_1}${CMAKE_MATCH_2})")
 endforeach()
 if (CPACK_DEBIAN_PACKAGE_SHLIBS_LIST)
   string(REPLACE ";" "\n" CPACK_DEBIAN_PACKAGE_SHLIBS "${CPACK_DEBIAN_PACKAGE_SHLIBS_LIST}")
