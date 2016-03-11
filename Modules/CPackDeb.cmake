@@ -216,6 +216,10 @@ endif()
 
 if(CPACK_DEB_PACKAGE_COMPONENT)
   string(TOUPPER "${CPACK_DEB_PACKAGE_COMPONENT}" COMPONENT_UPCASE)
+
+  if(CPACK_DEBIAN_PACKAGE_DEBUG)
+    message("\nCPackDeb Debug: process component ${CPACK_DEB_PACKAGE_COMPONENT}")
+  endif()
 endif()
 
 function(get_component_package_name var component)
@@ -227,6 +231,90 @@ function(get_component_package_name var component)
   endif()
 
   set("${var}" "${package_name}" PARENT_SCOPE)
+endfunction()
+
+function(get_files dir VAR)
+  execute_process(COMMAND find -maxdepth 1 -type f
+    COMMAND xargs file
+    WORKING_DIRECTORY "${dir}"
+    OUTPUT_VARIABLE files)
+
+  # Convert to CMake list
+  if (files)
+    string(REGEX REPLACE "\n" ";" files ${files})
+  endif()
+
+  set("${VAR}" ${files} PARENT_SCOPE)
+endfunction()
+
+# extact shared files from given location
+function(extract_shared_and_binary_objects dir shared_objects binary_objects)
+  get_files("${dir}" files)
+
+  foreach(file ${files})
+    if("${file}" MATCHES "ELF.*shared object")
+      string(REGEX MATCH "(^.*):" _FILE_NAME "${file}")
+      list(APPEND _shared_objects ${CMAKE_MATCH_1})
+    elseif("${file}" MATCHES "ELF.*dynamically linked")
+      string(REGEX MATCH "(^.*):" _FILE_NAME "${file}")
+      list(APPEND _binary_objects ${CMAKE_MATCH_1})
+    endif()
+  endforeach()
+
+  set("${shared_objects}" ${_shared_objects} PARENT_SCOPE)
+  set("${binary_objects}" ${_binary_objects} PARENT_SCOPE)
+endfunction()
+
+find_program(READELF_PROG NAMES readelf)
+
+# extract RPATHs for a given shared object
+function(extract_rpaths shared_object rpaths)
+  if(READELF_PROG)
+    execute_process(COMMAND "${READELF_PROG}" -d "${shared_object}"
+      RESULT_VARIABLE _result
+      OUTPUT_VARIABLE _output
+      ERROR_QUIET
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+    if(${_result} EQUAL 0)
+      string(REGEX MATCH "Library rpath: \\[(.*)\\]" _rpaths "${_output}")
+      string(REPLACE ":" ";" paths "${CMAKE_MATCH_1}")
+      set(${rpaths} ${paths} PARENT_SCOPE)
+    endif()
+  endif()
+endfunction()
+
+# explores given directory:
+# 1. Find shared and binary object
+# 2. Look their RPATHs add them for dpkg-shlibdeps
+function(explore_directory dir output)
+  if(NOT EXISTS "${dir}")
+    return()
+  endif()
+
+  extract_shared_and_binary_objects("${dir}" shared_objects binary_objects)
+
+  # add to library search paths if it contains .SO
+  if(shared_objects)
+    list(FIND ${output} "${dir}" index)
+    if(${index} EQUAL -1)
+      list(APPEND ${output} "${dir}")
+    endif()
+  endif()
+
+  foreach(obj ${shared_objects} ${binary_objects})
+    extract_rpaths("${dir}/${obj}" rpaths)
+
+    foreach(rpath ${rpaths})
+      list(FIND ${output} "${rpath}" index)
+      if(${index} EQUAL -1)
+        list(APPEND ${output} "${rpath}")
+      endif()
+    endforeach()
+  endforeach()
+
+  # set to parent scope
+  set(${output} ${${output}} PARENT_SCOPE)
 endfunction()
 
 # CPACK_DEBIAN_PACKAGE_SHLIBDEPS
@@ -292,6 +380,25 @@ if(CPACK_DEBIAN_PACKAGE_SHLIBDEPS)
       file(MAKE_DIRECTORY ${CPACK_TEMPORARY_DIRECTORY}/debian)
       file(WRITE ${CPACK_TEMPORARY_DIRECTORY}/debian/control "")
 
+      # scan the CPACK_INSTALL_CMAKE_PROJECTS variable
+      # it contains CMAKE_BINARY_DIR, try to detect library output path
+      # and pass it as an option to dpkg-shlibdeps
+      unset(lib_paths)
+      list(GET CPACK_INSTALL_CMAKE_PROJECTS 0 build_dir)
+      foreach(prefix lib libs bin)
+        explore_directory("${build_dir}/${prefix}" lib_paths)
+      endforeach()
+
+      if(lib_paths)
+        unset(export_ld_path)
+        foreach(path ${lib_paths})
+          set(export_ld_path "${export_ld_path}:${path}")
+        endforeach()
+
+        set(old_ld_path "ENV{LD_LIBRARY_PATH}")
+        set(ENV{LD_LIBRARY_PATH} "$ENV{LD_LIBRARY_PATH}${export_ld_path}")
+      endif()
+
       # Execute dpkg-shlibdeps
       # --ignore-missing-info : allow dpkg-shlibdeps to run even if some libs do not belong to a package
       # -O : print to STDOUT
@@ -300,7 +407,10 @@ if(CPACK_DEBIAN_PACKAGE_SHLIBDEPS)
         OUTPUT_VARIABLE SHLIBDEPS_OUTPUT
         RESULT_VARIABLE SHLIBDEPS_RESULT
         ERROR_VARIABLE SHLIBDEPS_ERROR
+        ERROR_STRIP_TRAILING_WHITESPACE
         OUTPUT_STRIP_TRAILING_WHITESPACE )
+      set(ENV{LD_LIBRARY_PATH} "${old_ld_path}")
+
       if(CPACK_DEBIAN_PACKAGE_DEBUG)
         # dpkg-shlibdeps will throw some warnings if some input files are not binary
         message( "CPackDeb Debug: dpkg-shlibdeps warnings \n${SHLIBDEPS_ERROR}")
