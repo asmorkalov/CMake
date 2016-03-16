@@ -170,6 +170,18 @@
 #     Usage: set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
 #            "${CMAKE_CURRENT_SOURCE_DIR/prerm;${CMAKE_CURRENT_SOURCE_DIR}/postrm")
 ##end
+##variable
+# CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS
+#     Mandatory : NO
+#     Default   : -
+#     This variable allow to generate shlibs control file automatically using
+#     CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS_POLICY
+##end
+# CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS_POLICY
+#     Mandatory : NO
+#     Default   : "="
+#     Defines libraries compatibility policy, m.b "=" or ">="
+##end
 
 
 #=============================================================================
@@ -674,18 +686,29 @@ if(CPACK_DEB_PACKAGE_COMPONENT)
   get_component_package_name(CPACK_DEBIAN_PACKAGE_NAME "${CPACK_DEB_PACKAGE_COMPONENT}")
 endif()
 
-# Generate shlibs file
-foreach(_FILE ${CPACK_DEB_SHARED_OBJECT_FILES})
-  get_filename_component(_LIBNAME ${_FILE} NAME_WE)
-  get_filename_component(_LIBEXT ${_FILE} EXT)
+if (NOT CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS_POLICY)
+  set(CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS_POLICY "=")
+endif()
 
-  # For now we just assume that anything after '+' or '-' in a library version is
-  # a build metadata which we do not want to be presented in dependency version
-  string(REGEX MATCH "so\\.([0-9]+\\.[0-9]+)([^+-]*)" _TARGET_VERSION ${_LIBEXT})
-  list(APPEND CPACK_DEBIAN_PACKAGE_SHLIBS_LIST "${_LIBNAME} ${CMAKE_MATCH_1} ${CPACK_DEBIAN_PACKAGE_NAME} (>= ${CMAKE_MATCH_1}${CMAKE_MATCH_2})")
-endforeach()
-if (CPACK_DEBIAN_PACKAGE_SHLIBS_LIST)
-  string(REPLACE ";" "\n" CPACK_DEBIAN_PACKAGE_SHLIBS "${CPACK_DEBIAN_PACKAGE_SHLIBS_LIST}")
+# Generate shlibs file
+if(NOT DEFINED CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS)
+  set(CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS 1)
+endif()
+
+if(CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS)
+  foreach(_FILE ${CPACK_DEB_SHARED_OBJECT_FILES})
+    get_filename_component(_LIBNAME ${_FILE} NAME_WE)
+    get_filename_component(_LIBEXT ${_FILE} EXT)
+
+    # For now we just assume that anything after '+' or '-' in a library version is
+    # a build metadata which we do not want to be presented in dependency version
+    string(REGEX MATCH "so\\.([0-9]+\\.[0-9]+)([^+-]*)" _TARGET_VERSION ${_LIBEXT})
+    list(APPEND CPACK_DEBIAN_PACKAGE_SHLIBS_LIST
+         "${_LIBNAME} ${CMAKE_MATCH_1} ${CPACK_DEBIAN_PACKAGE_NAME} (${CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS_POLICY} ${CMAKE_MATCH_1}${CMAKE_MATCH_2})")
+  endforeach()
+  if (CPACK_DEBIAN_PACKAGE_SHLIBS_LIST)
+    string(REPLACE ";" "\n" CPACK_DEBIAN_PACKAGE_SHLIBS "${CPACK_DEBIAN_PACKAGE_SHLIBS_LIST}")
+  endif()
 endif()
 
 # add ldconfig call in default postrm and postint

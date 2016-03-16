@@ -416,11 +416,14 @@ int cmCPackDebGenerator::createDeb()
   shlibsfilename += "/shlibs";
 
   const char* debian_pkg_shlibs = this->GetOption("CPACK_DEBIAN_PACKAGE_SHLIBS");
-  if (debian_pkg_shlibs)
-    { // the scope is needed for cmGeneratedFileStream
-    cmGeneratedFileStream out(shlibsfilename.c_str());
-    out << debian_pkg_shlibs;
-    out << std::endl;
+  if (this->IsOn("CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS") && debian_pkg_shlibs)
+    {
+        {// the scope is needed for cmGeneratedFileStream
+        cmGeneratedFileStream out(shlibsfilename.c_str());
+        out << debian_pkg_shlibs;
+        out << std::endl;
+        }
+        cmSystemTools::SetPermissions(shlibsfilename.c_str(), 0644);
     }
 
   if (this->IsOn("CPACK_ADD_LDCONFIG_CALL"))
@@ -429,22 +432,20 @@ int cmCPackDebGenerator::createDeb()
     postinst = this->GetOption("WDIR");
     postinst += "/postinst";
 
-    { // the scope is needed for cmGeneratedFileStream
-    cmGeneratedFileStream out(postinst.c_str());
-    out << "#!/bin/sh\n\nset -e\n\nif [ \"$1\" = \"configure\" ]; then\n\tldconfig\nfi\n";
-    }
+        { // the scope is needed for cmGeneratedFileStream
+        cmGeneratedFileStream out(postinst.c_str());
+        out << "#!/bin/sh\n\nset -e\n\nif [ \"$1\" = \"configure\" ]; then\n\tldconfig\nfi\n";
+        }
 
     std::string postrm;
     postrm = this->GetOption("WDIR");
     postrm += "/postrm";
 
-    { // the scope is needed for cmGeneratedFileStream
-    cmGeneratedFileStream out(postrm.c_str());
-    out << "#!/bin/sh\n\nset -e\n\nif [ \"$1\" = \"remove\" ]; then\n\tldconfig\nfi\n";
+        { // the scope is needed for cmGeneratedFileStream
+        cmGeneratedFileStream out(postrm.c_str());
+        out << "#!/bin/sh\n\nset -e\n\nif [ \"$1\" = \"remove\" ]; then\n\tldconfig\nfi\n";
+        }
     }
-    }
-
-  cmSystemTools::SetPermissions(shlibsfilename.c_str(), 0644);
 
   const char* debain_pkg_copyright_message = this->GetOption("CPACK_DEBIAN_PACKAGE_COPYRIGHT");
   const char* debian_pkg_license_type = this->GetOption("CPACK_DEBIAN_PACKAGE_LICENSE");
@@ -556,7 +557,9 @@ int cmCPackDebGenerator::createDeb()
     cmd += cmakeExecutable;
     cmd += "\" -E tar cfz control.tar.gz ./control ./md5sums";
     if( this->IsOn("CPACK_ADD_LDCONFIG_CALL") )
-      cmd += " ./shlibs ./postinst ./postrm";
+      cmd += " ./postinst ./postrm";
+    if( this->IsOn("CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS") && debian_pkg_shlibs )
+      cmd += " ./shlibs";
     const char* controlExtra =
       this->GetOption("CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA");
   if( controlExtra )
