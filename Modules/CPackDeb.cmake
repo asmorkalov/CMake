@@ -283,15 +283,33 @@ find_program(READELF_PROG NAMES readelf)
 function(extract_rpaths shared_object rpaths)
   if(READELF_PROG)
     execute_process(COMMAND "${READELF_PROG}" -d "${shared_object}"
+      WORKING_DIRECTORY "${CPACK_TEMPORARY_DIRECTORY}"
       RESULT_VARIABLE _result
       OUTPUT_VARIABLE _output
       ERROR_QUIET
       OUTPUT_STRIP_TRAILING_WHITESPACE)
 
     if(${_result} EQUAL 0)
-      string(REGEX MATCH "Library rpath: \\[(.*)\\]" _rpaths "${_output}")
+      string(REGEX MATCH "Library rpath: \\[[^\n]*\\]" _rpaths "${_output}")
       string(REPLACE ":" ";" paths "${CMAKE_MATCH_1}")
       set(${rpaths} ${paths} PARENT_SCOPE)
+    endif()
+  endif()
+endfunction()
+
+#extract library name and version for given shared object
+function(extract_soname shared_object libname version)
+  if(READELF_PROG)
+    execute_process(COMMAND "${READELF_PROG}" -d "${shared_object}"
+      WORKING_DIRECTORY "${CPACK_TEMPORARY_DIRECTORY}"
+      RESULT_VARIABLE _result
+      OUTPUT_VARIABLE _output
+      ERROR_QUIET
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(${_result} EQUAL 0)
+      string(REGEX MATCH "Library soname: \\[([^\n]+)\\.so\\.([^\n]*)\\]\n" _soname "${_output}")
+      set(${libname} "${CMAKE_MATCH_1}" PARENT_SCOPE)
+      set(${version} "${CMAKE_MATCH_2}" PARENT_SCOPE)
     endif()
   endif()
 endfunction()
@@ -695,16 +713,13 @@ if(NOT DEFINED CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS)
   set(CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS 1)
 endif()
 
-if(CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS)
+if(CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS AND READELF_PROG)
   foreach(_FILE ${CPACK_DEB_SHARED_OBJECT_FILES})
-    get_filename_component(_LIBNAME ${_FILE} NAME_WE)
-    get_filename_component(_LIBEXT ${_FILE} EXT)
-
-    # For now we just assume that anything after '+' or '-' in a library version is
-    # a build metadata which we do not want to be presented in dependency version
-    string(REGEX MATCH "so\\.([0-9]+\\.[0-9]+)([^+-]*)" _TARGET_VERSION ${_LIBEXT})
-    list(APPEND CPACK_DEBIAN_PACKAGE_SHLIBS_LIST
-         "${_LIBNAME} ${CMAKE_MATCH_1} ${CPACK_DEBIAN_PACKAGE_NAME} (${CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS_POLICY} ${CMAKE_MATCH_1}${CMAKE_MATCH_2})")
+    extract_soname(${_FILE} libname soversion)
+    if(libname AND soversion)
+      list(APPEND CPACK_DEBIAN_PACKAGE_SHLIBS_LIST
+           "${libname} ${soversion} ${CPACK_DEBIAN_PACKAGE_NAME} (${CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS_POLICY} ${CPACK_PACKAGE_VERSION})")
+    endif()
   endforeach()
   if (CPACK_DEBIAN_PACKAGE_SHLIBS_LIST)
     string(REPLACE ";" "\n" CPACK_DEBIAN_PACKAGE_SHLIBS "${CPACK_DEBIAN_PACKAGE_SHLIBS_LIST}")
