@@ -31,6 +31,16 @@
 ##end
 #
 ##variable
+#   CPACK_NSIS_MUI_WELCOMEFINISHPAGE_BITMAP - The filename of a bitmap
+#   to use as the NSIS MUI_WELCOMEFINISHPAGE_BITMAP.
+##end
+#
+##variable
+#   CPACK_NSIS_MUI_UNWELCOMEFINISHPAGE_BITMAP - The filename of a bitmap
+#   to use as the NSIS MUI_UNWELCOMEFINISHPAGE_BITMAP.
+##end
+#
+##variable
 #   CPACK_NSIS_EXTRA_PREINSTALL_COMMANDS - Extra NSIS commands that
 #   will be added to the beginning of the install Section, before your
 #   install tree is available on the target system.
